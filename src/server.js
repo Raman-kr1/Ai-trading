@@ -1,24 +1,36 @@
 /**
  * Server Entry Point
  * ===================
- * Initializes database, starts Express server, and optionally starts the trading worker.
+ * Initializes database, starts HTTP + WebSocket servers, and the trading worker.
  * Handles graceful shutdown for all connections.
  */
 
+const http = require('http');
 const config = require('./config');
 const app = require('./app');
 const { connectDatabase, disconnectDatabase } = require('./config/database');
 const { redisClient } = require('./config/redis');
 const { startWorker } = require('./workers/tradingWorker');
+const wsService = require('./services/websocket.service');
 const logger = require('./utils/logger');
 
 async function startServer() {
   try {
-    // Connect to MongoDB
-    await connectDatabase();
+    // Connect to MongoDB (non-fatal — system can still serve cached
+    // market data if Mongo is briefly down)
+    try {
+      await connectDatabase();
+    } catch (err) {
+      logger.error('MongoDB unavailable at startup. Continuing in degraded mode.', { error: err.message });
+    }
 
-    // Start Express server
-    const server = app.listen(config.app.port, () => {
+    const httpServer = http.createServer(app);
+
+    // Attach the dashboard WebSocket server BEFORE listen so handshake
+    // upgrades are routed correctly.
+    wsService.attach(httpServer, { defaultSymbol: 'BTCUSDT' });
+
+    httpServer.listen(config.app.port, () => {
       logger.info(`
 ╔══════════════════════════════════════════════════╗
 ║          AI TRADING SYSTEM v1.0.0                ║
@@ -28,12 +40,12 @@ async function startServer() {
 ║  Env:        ${config.app.env.padEnd(35)}║
 ║  Dashboard:  http://localhost:${config.app.port}/dashboard${' '.repeat(10)}║
 ║  API:        http://localhost:${config.app.port}/api${' '.repeat(16)}║
+║  WS:         ws://localhost:${config.app.port}/ws${' '.repeat(17)}║
 ║  Health:     http://localhost:${config.app.port}/health${' '.repeat(13)}║
 ╚══════════════════════════════════════════════════╝
       `);
     });
 
-    // Start the trading worker (in-process)
     let worker;
     try {
       worker = startWorker();
@@ -41,11 +53,9 @@ async function startServer() {
       logger.warn('Trading worker failed to start (Redis may be down):', err.message);
     }
 
-    // ── Graceful Shutdown ────────────────────────────────────
     const shutdown = async (signal) => {
       logger.info(`${signal} received. Shutting down gracefully...`);
-
-      server.close(() => logger.info('HTTP server closed.'));
+      httpServer.close(() => logger.info('HTTP server closed.'));
 
       if (worker) {
         await worker.close();

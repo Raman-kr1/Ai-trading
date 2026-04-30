@@ -17,6 +17,7 @@ const aiService = require('../services/ai.service');
 const riskService = require('../services/risk.service');
 const executionService = require('../services/execution.service');
 const Decision = require('../models/decision.model');
+const { emit: emitEvent } = require('../utils/eventBus');
 const logger = require('../utils/logger');
 
 // ─── Queue Setup ───────────────────────────────────────────────
@@ -86,6 +87,8 @@ async function processTradingJob(job) {
       latencyMs: decision._meta?.latencyMs,
     });
 
+    emitEvent('decision', decisionRecord.toObject());
+
     // Step 5: Risk validation
     job.updateProgress(70);
     if (decision.decision === 'HOLD') {
@@ -121,6 +124,8 @@ async function processTradingJob(job) {
     decisionRecord.executed = true;
     decisionRecord.tradeId = trade.tradeId;
     await decisionRecord.save();
+
+    emitEvent('trade', trade.toObject ? trade.toObject() : trade);
 
     const elapsed = Date.now() - startTime;
     logger.info(`✅ Pipeline complete: ${symbol} in ${elapsed}ms`, {

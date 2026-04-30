@@ -17,13 +17,18 @@ const app = express();
 
 // ── Security Middleware ────────────────────────────────────────
 app.use(helmet({ contentSecurityPolicy: false })); // CSP disabled for dashboard inline scripts
-app.use(cors());
+app.use(cors({
+  origin: (origin, cb) => cb(null, true), // Vite dev server / any origin in dev
+  credentials: true,
+}));
 
 // ── Rate Limiting ──────────────────────────────────────────────
 const limiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minute
-  max: 60,
+  max: 600, // dashboard polls a few endpoints every 1–5s
   message: { error: 'Too many requests. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
 });
 app.use('/api/', limiter);
 
@@ -42,6 +47,7 @@ app.use('/dashboard/static', express.static(path.join(__dirname, 'dashboard')));
 
 // ── Routes ─────────────────────────────────────────────────────
 app.use('/api/trading', require('./routes/trading.routes'));
+app.use('/api', require('./routes/api.routes')); // Frontend-facing aliases
 app.use('/dashboard', require('./routes/dashboard.routes'));
 
 // ── Health Check ───────────────────────────────────────────────
@@ -63,8 +69,18 @@ app.get('/api', (req, res) => {
     mode: config.app.tradingMode,
     endpoints: {
       health: 'GET /health',
-      marketData: 'GET /api/trading/market-data?symbol=BTCUSDT',
-      indicators: 'GET /api/trading/indicators?symbol=BTCUSDT',
+      // Dashboard-facing
+      frontendMarketData: 'GET /api/market-data?symbol=BTCUSDT',
+      frontendAiDecision: 'GET /api/ai-decision?symbol=BTCUSDT',
+      frontendTrades: 'GET /api/trades?page=1&limit=20',
+      frontendStatus: 'GET /api/status',
+      frontendLogs: 'GET /api/logs?limit=50',
+      frontendPnlSeries: 'GET /api/pnl-series?days=30',
+      frontendExecute: 'POST /api/execute',
+      websocket: 'WS /ws',
+      // Internal/legacy
+      tradingMarketData: 'GET /api/trading/market-data?symbol=BTCUSDT',
+      tradingIndicators: 'GET /api/trading/indicators?symbol=BTCUSDT',
       triggerTrade: 'POST /api/trading/trade',
       aiAnalysis: 'POST /api/trading/ai-analysis',
       closeTrade: 'POST /api/trading/trade/close',

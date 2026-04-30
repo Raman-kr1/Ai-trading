@@ -1,0 +1,61 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body, #root {
+    height: 100%;
+  }
+  body {
+    background-color: #0f172a;
+    color: #e2e8f0;
+    font-family: 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: #1f2c47;
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: #2a3a5e; }
+}
+
+@layer components {
+  .panel {
+    @apply bg-bg-panel border border-bg-border rounded-xl shadow-lg;
+  }
+  .panel-padded {
+    @apply panel p-5;
+  }
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold uppercase tracking-wide;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center px-4 py-2 rounded-lg font-medium transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-primary {
+    @apply btn bg-sky-600 hover:bg-sky-500 text-white;
+  }
+  .btn-success {
+    @apply btn bg-emerald-600 hover:bg-emerald-500 text-white;
+  }
+  .btn-danger {
+    @apply btn bg-rose-600 hover:bg-rose-500 text-white;
+  }
+  .btn-ghost {
+    @apply btn bg-bg-raised hover:bg-bg-border text-slate-200;
+  }
+  .input {
+    @apply bg-bg-raised border border-bg-border rounded-lg px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500/40;
+  }
+  .table-cell {
+    @apply px-3 py-2 text-sm whitespace-nowrap;
+  }
+}
+
+.flash-up { animation: flash-up 0.8s ease-out; }
+.flash-down { animation: flash-down 0.8s ease-out; }

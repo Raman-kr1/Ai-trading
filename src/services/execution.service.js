@@ -10,6 +10,7 @@ const config = require('../config');
 const Trade = require('../models/trade.model');
 const { createHmacSignature, generateTradeId, roundTo } = require('../utils/helpers');
 const { getKeepAliveConfig } = require('../utils/performance');
+const { emit: emitEvent } = require('../utils/eventBus');
 const logger = require('../utils/logger');
 
 // Pre-configured keep-alive agents for low-latency order placement
@@ -191,6 +192,7 @@ async function closeTrade(tradeId, exitPrice) {
 
     await trade.save();
     logger.info(`Trade closed: ${tradeId}`, { pnl: trade.pnl, pnlPercent: trade.pnlPercent });
+    emitEvent('trade:closed', trade.toObject ? trade.toObject() : trade);
     return trade;
   } catch (error) {
     logger.error(`Failed to close trade: ${tradeId}`, { error: error.message });

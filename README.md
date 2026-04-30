@@ -172,7 +172,40 @@ node src/backtesting/backtest.service.js ETHUSDT binance 5m 50000 1000
 | POST | `/api/trading/trade/close` | Close an open trade |
 | POST | `/api/trading/watchlist` | Update trading watchlist |
 | GET | `/api/trading/queue/status` | Queue statistics |
-| GET | `/dashboard` | Web dashboard |
+| GET | `/dashboard` | Legacy static dashboard |
+
+### Dashboard-facing API (`/api/*`)
+Used by the React frontend in `/frontend`.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET  | `/api/market-data?symbol=BTCUSDT&timeframe=1m` | Live price, candles, indicators |
+| GET  | `/api/ai-decision?symbol=BTCUSDT&live=true`    | Latest persisted or fresh Claude decision |
+| GET  | `/api/trades?page=1&limit=20&search=BTC&status=OPEN` | Paginated trade history with stats |
+| POST | `/api/trades/:tradeId/close`                   | Close an open trade |
+| GET  | `/api/status`                                  | Mongo / Redis / Binance / Claude / mode |
+| GET  | `/api/logs?limit=50&level=info`                | Recent logs from MongoDB |
+| GET  | `/api/pnl-series?days=30`                      | Cumulative PnL series for the equity chart |
+| POST | `/api/execute`                                 | Queue a manual trading cycle |
+| WS   | `/ws`                                          | Live `price` / `decision` / `trade` / `log` stream |
+
+## 🖥️ React Dashboard (`/frontend`)
+
+```bash
+# Terminal 1 — backend (already running on :3000)
+npm install
+npm start
+
+# Terminal 2 — frontend
+cd frontend
+npm install
+npm run dev          # http://localhost:5173 (proxies /api & /ws to :3000)
+npm run build        # production bundle in dist/
+```
+
+The frontend stack: **Vite + React 18 + Tailwind + Zustand + Recharts + Axios**.
+It connects to `/ws` for real-time price/decision/trade/log streams and falls
+back to REST polling automatically if the WebSocket can't connect.
 
 ## 🔒 Security
 
