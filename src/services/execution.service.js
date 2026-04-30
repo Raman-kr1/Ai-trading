@@ -9,7 +9,11 @@ const axios = require('axios');
 const config = require('../config');
 const Trade = require('../models/trade.model');
 const { createHmacSignature, generateTradeId, roundTo } = require('../utils/helpers');
+const { getKeepAliveConfig } = require('../utils/performance');
 const logger = require('../utils/logger');
+
+// Pre-configured keep-alive agents for low-latency order placement
+const keepAlive = getKeepAliveConfig();
 
 /**
  * Execute a trade based on the validated AI decision.
