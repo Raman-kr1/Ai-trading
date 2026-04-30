@@ -1,0 +1,43 @@
+{
+  "name": "ai-trading-system",
+  "version": "1.0.0",
+  "description": "Production-ready AI Trading Automation System with Binance, Zerodha, and Claude AI integration",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "worker": "node src/workers/tradingWorker.js",
+    "backtest": "node src/backtesting/backtest.service.js",
+    "test:run": "node scripts/testRun.js",
+    "migrate": "node src/config/database.js --migrate",
+    "lint": "eslint src/",
+    "test": "jest --coverage"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "axios": "^1.7.9",
+    "bullmq": "^5.34.8",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
+    "helmet": "^8.0.0",
+    "ioredis": "^5.4.2",
+    "mongoose": "^8.9.5",
+    "morgan": "^1.10.0",
+    "node-cron": "^3.0.3",
+    "technicalindicators": "^3.1.0",
+    "uuid": "^11.0.5",
+    "winston": "^3.17.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "eslint": "^9.17.0",
+    "jest": "^29.7.0",
+    "nodemon": "^3.1.9"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "license": "MIT"
+}

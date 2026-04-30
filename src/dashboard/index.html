@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Trading Dashboard</title>
+  <style>
+    :root {
+      --bg-primary: #0a0e1a;
+      --bg-secondary: #111827;
+      --bg-card: #1a1f35;
+      --border: #2d3555;
+      --text-primary: #e2e8f0;
+      --text-secondary: #94a3b8;
+      --accent-green: #22c55e;
+      --accent-red: #ef4444;
+      --accent-blue: #3b82f6;
+      --accent-purple: #8b5cf6;
+      --accent-amber: #f59e0b;
+      --glass: rgba(255,255,255,0.03);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+    }
+
+    .header {
+      background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-card) 100%);
+      border-bottom: 1px solid var(--border);
+      padding: 1rem 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .header h1 {
+      font-size: 1.5rem;
+      background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .header .mode-badge {
+      padding: 0.25rem 1rem;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+    .mode-paper { background: rgba(245,158,11,0.15); color: var(--accent-amber); border: 1px solid var(--accent-amber); }
+    .mode-live { background: rgba(239,68,68,0.15); color: var(--accent-red); border: 1px solid var(--accent-red); }
+
+    .container { padding: 1.5rem 2rem; max-width: 1400px; margin: 0 auto; }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+
+    .stat-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.25rem;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .stat-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 25px rgba(0,0,0,0.3);
+    }
+    .stat-card .label { font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+    .stat-card .value { font-size: 1.75rem; font-weight: 700; }
+    .stat-card .sub { font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.25rem; }
+    .positive { color: var(--accent-green); }
+    .negative { color: var(--accent-red); }
+
+    .section { margin-bottom: 2rem; }
+    .section-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--bg-card);
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+    th { background: var(--bg-secondary); color: var(--text-secondary); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.75rem 1rem; text-align: left; }
+    td { padding: 0.75rem 1rem; border-top: 1px solid var(--border); font-size: 0.85rem; }
+    tr:hover td { background: var(--glass); }
+
+    .badge {
+      padding: 0.15rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.7rem;
+      font-weight: 600;
+    }
+    .badge-buy { background: rgba(34,197,94,0.15); color: var(--accent-green); }
+    .badge-sell { background: rgba(239,68,68,0.15); color: var(--accent-red); }
+    .badge-hold { background: rgba(148,163,184,0.15); color: var(--text-secondary); }
+
+    .actions { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+    .btn {
+      padding: 0.5rem 1.25rem;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg-card);
+      color: var(--text-primary);
+      cursor: pointer;
+      font-size: 0.85rem;
+      transition: all 0.2s;
+    }
+    .btn:hover { background: var(--bg-secondary); border-color: var(--accent-blue); }
+    .btn-primary { background: var(--accent-blue); border-color: var(--accent-blue); }
+    .btn-primary:hover { background: #2563eb; }
+
+    .loading { text-align: center; padding: 2rem; color: var(--text-secondary); }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+    .loading { animation: pulse 1.5s infinite; }
+
+    @media (max-width: 768px) {
+      .container { padding: 1rem; }
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>⚡ AI Trading Dashboard</h1>
+    <span class="mode-badge mode-paper" id="modeBadge">PAPER MODE</span>
+  </div>
+
+  <div class="container">
+    <div class="actions">
+      <button class="btn btn-primary" onclick="refreshAll()">↻ Refresh</button>
+      <button class="btn" onclick="triggerAnalysis()">🤖 Run AI Analysis</button>
+      <button class="btn" onclick="viewQueue()">📋 Queue Status</button>
+    </div>
+
+    <div class="stats-grid" id="statsGrid">
+      <div class="stat-card"><div class="label">Total PnL</div><div class="value" id="totalPnl">--</div><div class="sub" id="pnlPeriod">Last 30 days</div></div>
+      <div class="stat-card"><div class="label">Win Rate</div><div class="value" id="winRate">--</div><div class="sub" id="totalTrades">-- trades</div></div>
+      <div class="stat-card"><div class="label">Profit Factor</div><div class="value" id="profitFactor">--</div><div class="sub">Avg Win / Avg Loss</div></div>
+      <div class="stat-card"><div class="label">AI Accuracy</div><div class="value" id="aiAccuracy">--</div><div class="sub" id="aiTotal">-- decisions</div></div>
+      <div class="stat-card"><div class="label">Open Positions</div><div class="value" id="openPositions">--</div><div class="sub">Active trades</div></div>
+      <div class="stat-card"><div class="label">Today's PnL</div><div class="value" id="todayPnl">--</div><div class="sub">Since market open</div></div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">📊 Recent Trades</div>
+      <table>
+        <thead><tr><th>Time</th><th>Symbol</th><th>Side</th><th>Entry</th><th>Status</th><th>PnL</th><th>Confidence</th></tr></thead>
+        <tbody id="tradesTable"><tr><td colspan="7" class="loading">Loading trades...</td></tr></tbody>
+      </table>
+    </div>
+
+    <div class="section">
+      <div class="section-title">🤖 Recent AI Decisions</div>
+      <table>
+        <thead><tr><th>Time</th><th>Symbol</th><th>Decision</th><th>Confidence</th><th>Risk</th><th>Executed</th><th>Reasoning</th></tr></thead>
+        <tbody id="decisionsTable"><tr><td colspan="7" class="loading">Loading decisions...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = '/dashboard/api';
+
+    async function fetchJSON(url) {
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return await res.json();
+      } catch (e) { console.error(`Fetch failed: ${url}`, e); return null; }
+    }
+
+    async function loadStats() {
+      const stats = await fetchJSON(`${API_BASE}/stats?days=30`);
+      if (!stats) return;
+      document.getElementById('totalPnl').textContent = `$${stats.totalPnL?.toFixed(2) || '0.00'}`;
+      document.getElementById('totalPnl').className = `value ${stats.totalPnL >= 0 ? 'positive' : 'negative'}`;
+      document.getElementById('winRate').textContent = `${stats.winRate || 0}%`;
+      document.getElementById('profitFactor').textContent = stats.profitFactor || '0.00';
+      document.getElementById('totalTrades').textContent = `${stats.totalTrades || 0} trades`;
+    }
+
+    async function loadAIAccuracy() {
+      const data = await fetchJSON(`${API_BASE}/ai-accuracy`);
+      if (!data) return;
+      document.getElementById('aiAccuracy').textContent = `${data.accuracy || 0}%`;
+      document.getElementById('aiTotal').textContent = `${data.total || 0} decisions`;
+    }
+
+    async function loadTrades() {
+      const trades = await fetchJSON(`${API_BASE}/trades?limit=15`);
+      const tbody = document.getElementById('tradesTable');
+      if (!trades || !trades.length) { tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-secondary)">No trades yet</td></tr>'; return; }
+      tbody.innerHTML = trades.map(t => `
+        <tr>
+          <td>${new Date(t.createdAt).toLocaleString('en-IN',{timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit'})}</td>
+          <td><strong>${t.symbol}</strong></td>
+          <td><span class="badge badge-${t.side?.toLowerCase()}">${t.side}</span></td>
+          <td>$${t.entryPrice?.toFixed(2)}</td>
+          <td>${t.status}</td>
+          <td class="${(t.pnl||0) >= 0 ? 'positive' : 'negative'}">$${(t.pnl||0).toFixed(2)}</td>
+          <td>${t.riskCheck?.confidence || '--'}%</td>
+        </tr>`).join('');
+    }
+
+    async function loadDecisions() {
+      const decisions = await fetchJSON(`${API_BASE}/decisions?limit=15`);
+      const tbody = document.getElementById('decisionsTable');
+      if (!decisions || !decisions.length) { tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-secondary)">No decisions yet</td></tr>'; return; }
+      tbody.innerHTML = decisions.map(d => `
+        <tr>
+          <td>${new Date(d.createdAt).toLocaleString('en-IN',{timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit'})}</td>
+          <td><strong>${d.symbol}</strong></td>
+          <td><span class="badge badge-${d.decision?.toLowerCase()}">${d.decision}</span></td>
+          <td>${d.confidence}%</td>
+          <td>${d.riskApproved ? '✅' : '❌'}</td>
+          <td>${d.executed ? '✅' : '—'}</td>
+          <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${d.reasoning || '--'}</td>
+        </tr>`).join('');
+    }
+
+    async function refreshAll() {
+      await Promise.all([loadStats(), loadAIAccuracy(), loadTrades(), loadDecisions()]);
+    }
+
+    async function triggerAnalysis() {
+      const symbol = prompt('Enter symbol (e.g., BTCUSDT):', 'BTCUSDT');
+      if (!symbol) return;
+      const res = await fetch('/api/trading/ai-analysis', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symbol, exchange: 'binance' }),
+      });
+      const data = await res.json();
+      alert(`AI Decision: ${data.decision?.decision || 'N/A'}\nConfidence: ${data.decision?.confidence || 0}%`);
+      refreshAll();
+    }
+
+    async function viewQueue() {
+      const data = await fetchJSON('/api/trading/queue/status');
+      if (data) alert(`Queue: ${data.queue}\nWaiting: ${data.waiting}\nActive: ${data.active}\nCompleted: ${data.completed}\nFailed: ${data.failed}`);
+    }
+
+    // Load on start and auto-refresh every 30s
+    refreshAll();
+    setInterval(refreshAll, 30000);
+  </script>
+</body>
+</html>
