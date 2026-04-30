@@ -4,6 +4,9 @@
   "description": "Production-ready AI Trading Automation System with Binance, Zerodha, and Claude AI integration",
   "main": "src/server.js",
   "scripts": {
+    "dev:all": "node dev.js",
+    "dev:no-worker": "node dev.js --no-worker",
+    "dev:backend-only": "node dev.js --no-worker --no-frontend",
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "worker": "node src/workers/tradingWorker.js",
