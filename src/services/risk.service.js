@@ -98,6 +98,21 @@ async function validateTrade(decision, capital, symbol) {
     );
   }
 
+  // ── Rule 5b: Per-asset exposure cap ───────────────────────
+  // Concentration limit: stop us from piling six BTC longs and
+  // calling it diversified. Counts the *new* trade against the
+  // existing open exposure on the same symbol.
+  const symbolExposure = await getSymbolExposure(symbol);
+  const newExposure = symbolExposure + positionValue;
+  const symbolPercent = capital > 0 ? roundTo((newExposure / capital) * 100, 2) : 100;
+  metrics.symbolExposurePercent = symbolPercent;
+
+  if (symbolPercent > config.risk.maxExposurePerAssetPercent) {
+    reasons.push(
+      `Per-asset exposure ${symbolPercent}% on ${symbol} exceeds maximum ${config.risk.maxExposurePerAssetPercent}%`
+    );
+  }
+
   // ── Rule 6: HOLD decisions are auto-rejected ──────────────
   if (decision.decision === 'HOLD') {
     reasons.push('AI decision is HOLD — no trade to execute');
@@ -198,4 +213,27 @@ async function getOpenPositionCount() {
   }
 }
 
-module.exports = { validateTrade, calculatePositionSize, getDailyPnL, getOpenPositionCount };
+/**
+ * Sum the notional (entryPrice × quantity) of currently open trades
+ * on a given symbol. Used for the per-asset concentration cap.
+ */
+async function getSymbolExposure(symbol) {
+  try {
+    const trades = await Trade.find({
+      symbol,
+      status: { $in: ['OPEN', 'PENDING'] },
+    }).lean();
+    return trades.reduce((sum, t) => sum + (t.entryPrice || 0) * (t.quantity || 0), 0);
+  } catch (error) {
+    logger.error(`Failed to compute symbol exposure for ${symbol}: ${error.message}`);
+    return 0;
+  }
+}
+
+module.exports = {
+  validateTrade,
+  calculatePositionSize,
+  getDailyPnL,
+  getOpenPositionCount,
+  getSymbolExposure,
+};

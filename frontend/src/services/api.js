@@ -43,6 +43,10 @@ export const api = {
   killSwitchResume: (actor) => client.post('/kill-switch/resume', { actor }).then((r) => r.data),
   execute: (body) => client.post('/execute', body).then((r) => r.data),
   closeTrade: (tradeId, body) => client.post(`/trades/${tradeId}/close`, body).then((r) => r.data),
+  watchlist: () => client.get('/watchlist').then((r) => r.data),
+  scan: (topN = 3) => client.get('/scan', { params: { topN } }).then((r) => r.data),
+  askAi: (symbol, question) =>
+    client.post('/ask-ai', { symbol, question }, { timeout: 60000 }).then((r) => r.data),
 };
 
 export default client;

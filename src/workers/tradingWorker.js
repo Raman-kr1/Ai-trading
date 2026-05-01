@@ -17,6 +17,8 @@ const aiService = require('../services/ai.service');
 const riskService = require('../services/risk.service');
 const executionService = require('../services/execution.service');
 const killSwitch = require('../services/killSwitch.service');
+const scannerService = require('../services/scanner.service');
+const watchlist = require('../config/watchlist');
 const Decision = require('../models/decision.model');
 const { emit: emitEvent } = require('../utils/eventBus');
 const logger = require('../utils/logger');
@@ -151,10 +153,47 @@ async function processTradingJob(job) {
   }
 }
 
+// ─── Scanner Job Handler ───────────────────────────────────────
+//
+// Replaces the old "fixed pair list" scheduling. Runs the multi-asset
+// scanner and queues individual `trade-cycle` jobs only for the
+// top-N actionable opportunities. Keeps Claude/Binance call volume
+// proportional to the watchlist size, not its square.
+
+async function processScannerJob(job) {
+  if (await killSwitch.isHalted()) {
+    logger.warn('⛔ Scanner halted by kill-switch');
+    return { status: 'halted' };
+  }
+
+  const topN = job.data?.topN ?? 3;
+  const result = await scannerService.runCycle({ topN });
+
+  const queued = [];
+  for (const opp of result.opportunities) {
+    if (!opp.actionable) continue;
+    const j = await addTradingJob(opp.symbol, opp.exchange, {
+      timeframe: watchlist.getBySymbol(opp.symbol)?.timeframe || '1m',
+      capital: job.data?.capital || 10000,
+    });
+    queued.push({ symbol: opp.symbol, jobId: j.id, score: opp.score });
+  }
+
+  return {
+    status: 'scanned',
+    scanned: result.count,
+    queued,
+    elapsedMs: result.elapsedMs,
+  };
+}
+
 // ─── Worker Instance ───────────────────────────────────────────
 
 function startWorker() {
-  const worker = new Worker(QUEUE_NAME, processTradingJob, {
+  const handler = (job) => (
+    job.name === 'scanner-cycle' ? processScannerJob(job) : processTradingJob(job)
+  );
+  const worker = new Worker(QUEUE_NAME, handler, {
     connection: {
       host: config.redis.host,
       port: config.redis.port,
@@ -198,9 +237,13 @@ async function addTradingJob(symbol, exchange = 'binance', options = {}) {
 
 /**
  * Add recurring jobs via cron-like scheduling.
+ *
+ * The legacy mode (caller supplies a fixed `symbols` list) is kept for
+ * scripts/tests. Production callers should use `scheduleScannerCycle()`
+ * which lets the scanner pick which symbols actually deserve a Claude
+ * call this minute.
  */
 async function scheduleRecurringJobs(symbols) {
-  // Clear existing repeatable jobs
   const repeatables = await tradingQueue.getRepeatableJobs();
   for (const job of repeatables) {
     await tradingQueue.removeRepeatableByKey(job.key);
@@ -220,6 +263,30 @@ async function scheduleRecurringJobs(symbols) {
   }
 }
 
+/**
+ * Schedule a single recurring scanner job. The scanner walks the
+ * watchlist, ranks opportunities, and queues only the best ones.
+ */
+async function scheduleScannerCycle({ topN = 3, capital = 10000 } = {}) {
+  const repeatables = await tradingQueue.getRepeatableJobs();
+  for (const job of repeatables) {
+    await tradingQueue.removeRepeatableByKey(job.key);
+  }
+
+  await tradingQueue.add(
+    'scanner-cycle',
+    { topN, capital },
+    {
+      repeat: { every: config.scheduler.tradingIntervalMs },
+      removeOnComplete: 100,
+      removeOnFail: 50,
+    }
+  );
+  logger.info(
+    `🔭 Scanner scheduled — every ${config.scheduler.tradingIntervalMs}ms, topN=${topN}`
+  );
+}
+
 // ─── Standalone Worker Startup ─────────────────────────────────
 
 if (require.main === module) {
@@ -227,14 +294,18 @@ if (require.main === module) {
     await connectDatabase();
     startWorker();
 
-    // Default watchlist — configure via API or env
-    await scheduleRecurringJobs([
-      { symbol: 'BTCUSDT', exchange: 'binance' },
-      { symbol: 'ETHUSDT', exchange: 'binance' },
-    ]);
+    await scheduleScannerCycle({ topN: 3 });
 
     logger.info('Trading worker running. Press Ctrl+C to stop.');
   })();
 }
 
-module.exports = { tradingQueue, startWorker, addTradingJob, scheduleRecurringJobs, processTradingJob };
+module.exports = {
+  tradingQueue,
+  startWorker,
+  addTradingJob,
+  scheduleRecurringJobs,
+  scheduleScannerCycle,
+  processTradingJob,
+  processScannerJob,
+};

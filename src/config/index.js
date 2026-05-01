@@ -61,6 +61,8 @@ const config = {
     minRiskRewardRatio: parseFloat(process.env.MIN_RISK_REWARD_RATIO) || 2,
     minConfidenceScore: parseFloat(process.env.MIN_CONFIDENCE_SCORE) || 60,
     maxOpenPositions: parseInt(process.env.MAX_OPEN_POSITIONS, 10) || 5,
+    maxExposurePerAssetPercent:
+      parseFloat(process.env.MAX_EXPOSURE_PER_ASSET_PERCENT) || 10,
   },
 
   // ── Scheduler ────────────────────────────────────────────────

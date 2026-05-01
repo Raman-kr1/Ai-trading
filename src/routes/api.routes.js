@@ -11,6 +11,9 @@ const ctrl = require('../controllers/api.controller');
 const { addTradingJob } = require('../workers/tradingWorker');
 const positionMonitor = require('../services/positionMonitor.service');
 const killSwitch = require('../services/killSwitch.service');
+const scannerService = require('../services/scanner.service');
+const askAi = require('../services/askAi.service');
+const watchlist = require('../config/watchlist');
 
 router.get('/market-data', ctrl.getMarketData);
 router.get('/ai-decision', ctrl.getAIDecision);
@@ -46,6 +49,34 @@ router.post('/kill-switch/resume', async (req, res) => {
   try {
     const actor = (req.body && req.body.actor) || 'dashboard';
     res.json(await killSwitch.resume(actor));
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// ── Watchlist + scanner + ask-ai ─────────────────────────────
+router.get('/watchlist', (_req, res) => {
+  const assets = watchlist.getActive().map((a) => ({
+    id: a.id, symbol: a.symbol, exchange: a.exchange,
+    assetClass: a.assetClass, timeframe: a.timeframe,
+    marketOpen: watchlist.isMarketOpen(a),
+  }));
+  res.json({ assets });
+});
+
+router.get('/scan', async (req, res) => {
+  try {
+    const topN = Math.max(1, Math.min(10, parseInt(req.query.topN, 10) || 3));
+    res.json(await scannerService.runCycle({ topN }));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/ask-ai', async (req, res) => {
+  try {
+    const { symbol, question } = req.body || {};
+    res.json(await askAi.answerQuestion({ symbol, question }));
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
