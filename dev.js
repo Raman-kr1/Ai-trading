@@ -18,7 +18,7 @@
 
 'use strict';
 
-const { spawn } = require('child_process');
+const { spawn, exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const net = require('net');
@@ -340,6 +340,21 @@ async function main() {
   syslog(`API docs → ${C.backend}http://localhost:3000/api${C.reset}`, 'ok');
   syslog(`WS test  → ${C.backend}ws://localhost:3000/ws${C.reset}`, 'ok');
   process.stdout.write('\n');
+
+  // Open the dashboard in the default browser after services warm up.
+  if (!SKIP_FRONTEND) {
+    const url = 'http://localhost:5173';
+    const delay = SKIP_WORKER ? 3000 : 6000; // give Vite a moment to start
+    setTimeout(() => {
+      const cmd =
+        process.platform === 'darwin' ? `open "${url}"` :
+        process.platform === 'win32'  ? `start "" "${url}"` :
+                                        `xdg-open "${url}"`;
+      exec(cmd, (err) => {
+        if (!err) syslog(`🌐 Opened browser → ${url}`, 'ok');
+      });
+    }, delay);
+  }
 }
 
 main().catch((err) => {

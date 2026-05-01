@@ -48,6 +48,18 @@ async function executeTrade({ symbol, exchange, decision, riskCheck, quantity, a
       const result = await placeBinanceOrder(symbol, decision, quantity);
       exchangeResponse = result;
       exchangeOrderId = result.orderId;
+      // Best-effort: also lodge an OCO so the exchange itself enforces
+      // SL/TP if our process dies. Failure here is logged but does not
+      // void the entry trade — the in-process position monitor is the
+      // primary exit path.
+      try {
+        const oco = await placeBinanceOco(symbol, decision, quantity);
+        exchangeResponse = { entry: result, oco };
+      } catch (ocoErr) {
+        logger.warn('Binance OCO placement failed (entry succeeded)', {
+          symbol, error: ocoErr.message,
+        });
+      }
     } else if (exchange === 'zerodha') {
       const result = await placeZerodhaOrder(symbol, decision, quantity);
       exchangeResponse = result;
@@ -122,6 +134,56 @@ async function placeBinanceOrder(symbol, decision, quantity) {
   );
 
   logger.info('Binance order placed:', { orderId: response.data.orderId, status: response.data.status });
+  return response.data;
+}
+
+/**
+ * Place a Binance OCO (One-Cancels-Other) order pairing the
+ * stop-loss and take-profit legs on the exchange itself. Used as a
+ * safety net so exits trigger even if our server dies.
+ *
+ * Direction is the *opposite* of the entry side: a BUY entry needs a
+ * SELL OCO to close, and vice-versa.
+ */
+async function placeBinanceOco(symbol, decision, quantity) {
+  const closingSide = decision.decision === 'BUY' ? 'SELL' : 'BUY';
+  const timestamp = Date.now();
+
+  const stopPrice = roundTo(decision.stop_loss, 2);
+  // Limit leg of the stop must be a hair worse than the trigger so it
+  // actually fills in fast-moving markets.
+  const stopLimitPrice = closingSide === 'SELL'
+    ? roundTo(stopPrice * 0.999, 2)
+    : roundTo(stopPrice * 1.001, 2);
+
+  const params = {
+    symbol,
+    side: closingSide,
+    quantity: quantity.toString(),
+    price: roundTo(decision.target_price, 2).toString(),  // take-profit limit
+    stopPrice: stopPrice.toString(),                       // stop trigger
+    stopLimitPrice: stopLimitPrice.toString(),
+    stopLimitTimeInForce: 'GTC',
+    timestamp,
+  };
+
+  const queryString = Object.entries(params).map(([k, v]) => `${k}=${v}`).join('&');
+  const signature = createHmacSignature(queryString, config.binance.apiSecret);
+
+  const response = await axios.post(
+    `${config.binance.baseUrl}/api/v3/order/oco`,
+    null,
+    {
+      params: { ...params, signature },
+      headers: { 'X-MBX-APIKEY': config.binance.apiKey },
+      timeout: 10000,
+    }
+  );
+
+  logger.info('Binance OCO placed', {
+    symbol, listOrderId: response.data.orderListId,
+    stop: stopPrice, target: params.price,
+  });
   return response.data;
 }
 
@@ -200,4 +262,11 @@ async function closeTrade(tradeId, exitPrice) {
   }
 }
 
-module.exports = { executeTrade, closeTrade, placeBinanceOrder, placeZerodhaOrder, simulatePaperTrade };
+module.exports = {
+  executeTrade,
+  closeTrade,
+  placeBinanceOrder,
+  placeBinanceOco,
+  placeZerodhaOrder,
+  simulatePaperTrade,
+};

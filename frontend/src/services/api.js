@@ -37,6 +37,7 @@ export const api = {
   status: () => client.get('/status').then((r) => r.data),
   logs: (params = {}) => client.get('/logs', { params }).then((r) => r.data),
   pnlSeries: (params = {}) => client.get('/pnl-series', { params }).then((r) => r.data),
+  positions: () => client.get('/positions').then((r) => r.data),
   execute: (body) => client.post('/execute', body).then((r) => r.data),
   closeTrade: (tradeId, body) => client.post(`/trades/${tradeId}/close`, body).then((r) => r.data),
 };

@@ -118,55 +118,102 @@ async function fetchBinanceBalance() {
 
 /**
  * Subscribe to a real-time kline stream from Binance via WebSocket.
+ * Falls back to REST polling when the WS is unavailable (e.g., testnet
+ * kline streams return 404 — a known Binance testnet limitation).
  *
- * @param {string} symbol   - e.g. 'btcusdt' (lowercase for WS)
+ * @param {string} symbol   - e.g. 'BTCUSDT'
  * @param {string} interval - e.g. '1m'
  * @param {Function} onData - Callback receiving normalized candle data
- * @returns {WebSocket} The WebSocket instance for cleanup
+ * @returns {{ close: Function }} Handle to stop the stream/poll
  */
 function subscribeBinanceStream(symbol, interval = '1m', onData) {
-  const wsUrl = `${config.binance.wsUrl}/${symbol.toLowerCase()}@kline_${interval}`;
-  const ws = new WebSocket(wsUrl);
+  let consecutiveFails = 0;
+  const MAX_WS_FAILS = 3;
+  let stopped = false;
+  let pollTimer = null;
+  let wsInstance = null;
 
-  ws.on('open', () => {
-    logger.info(`WebSocket connected: ${symbol}@kline_${interval}`);
-  });
+  function startPolling() {
+    if (pollTimer || stopped) return;
+    logger.warn(`📊 WS unavailable for ${symbol} — switching to REST polling (5 s)`);
 
-  ws.on('message', (data) => {
-    try {
-      const parsed = JSON.parse(data);
-      const kline = parsed.k;
+    const poll = async () => {
+      if (stopped) return;
+      try {
+        const price = await fetchBinancePrice(symbol);
+        const candle = {
+          timestamp: Date.now(),
+          open: price, high: price, low: price, close: price,
+          volume: 0, isClosed: false, source: 'binance-poll',
+        };
+        await cache.set(`binance:live:${symbol.toUpperCase()}`, candle, 10);
+        if (onData) onData(candle);
+      } catch (e) {
+        logger.debug(`Price poll error for ${symbol}: ${e.message}`);
+      }
+    };
 
-      const candle = {
-        timestamp: kline.t,
-        open: parseFloat(kline.o),
-        high: parseFloat(kline.h),
-        low: parseFloat(kline.l),
-        close: parseFloat(kline.c),
-        volume: parseFloat(kline.v),
-        isClosed: kline.x, // true when candle is complete
-        source: 'binance',
-      };
+    poll();
+    pollTimer = setInterval(poll, 5000);
+  }
 
-      // Cache latest candle
-      cache.set(`binance:live:${symbol.toUpperCase()}`, candle, 5);
+  function tryWs() {
+    if (stopped) return;
+    const wsUrl = `${config.binance.wsUrl}/${symbol.toLowerCase()}@kline_${interval}`;
+    const ws = new WebSocket(wsUrl);
+    wsInstance = ws;
 
-      if (onData) onData(candle);
-    } catch (error) {
-      logger.error('WebSocket message parse error:', { error: error.message });
-    }
-  });
+    ws.on('open', () => {
+      consecutiveFails = 0;
+      logger.info(`WebSocket connected: ${symbol}@kline_${interval}`);
+    });
 
-  ws.on('error', (error) => {
-    logger.error('WebSocket error:', { error: error.message });
-  });
+    ws.on('message', (data) => {
+      try {
+        const parsed = JSON.parse(data);
+        const kline = parsed.k;
+        const candle = {
+          timestamp: kline.t,
+          open: parseFloat(kline.o), high: parseFloat(kline.h),
+          low: parseFloat(kline.l),  close: parseFloat(kline.c),
+          volume: parseFloat(kline.v), isClosed: kline.x,
+          source: 'binance',
+        };
+        cache.set(`binance:live:${symbol.toUpperCase()}`, candle, 5);
+        if (onData) onData(candle);
+      } catch (error) {
+        logger.error('WebSocket message parse error:', { error: error.message });
+      }
+    });
 
-  ws.on('close', () => {
-    logger.warn(`WebSocket closed: ${symbol}@kline_${interval}. Reconnecting in 5s...`);
-    setTimeout(() => subscribeBinanceStream(symbol, interval, onData), 5000);
-  });
+    ws.on('error', () => {
+      consecutiveFails += 1;
+    });
 
-  return ws;
+    ws.on('close', () => {
+      if (stopped) return;
+      consecutiveFails += 1;
+      if (consecutiveFails >= MAX_WS_FAILS) {
+        // WS stream is persistently broken (testnet kline 404).
+        // Give up on reconnecting and use REST polling instead.
+        startPolling();
+      } else {
+        const delay = Math.min(5000 * consecutiveFails, 30000);
+        logger.warn(`WebSocket closed: ${symbol}@kline_${interval}. Retry in ${delay / 1000}s…`);
+        setTimeout(tryWs, delay);
+      }
+    });
+  }
+
+  tryWs();
+
+  return {
+    close() {
+      stopped = true;
+      if (pollTimer) clearInterval(pollTimer);
+      if (wsInstance) try { wsInstance.terminate(); } catch { /* noop */ }
+    },
+  };
 }
 
 // ─── Zerodha Kite API ──────────────────────────────────────────

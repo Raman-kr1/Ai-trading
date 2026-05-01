@@ -20,7 +20,7 @@ const { bus } = require('../utils/eventBus');
 const marketDataService = require('./marketData.service');
 const logger = require('../utils/logger');
 
-const ALL_CHANNELS = ['price', 'candle', 'decision', 'trade', 'trade:closed', 'log', 'status'];
+const ALL_CHANNELS = ['price', 'candle', 'decision', 'trade', 'trade:closed', 'position:exit', 'log', 'status'];
 
 let wss = null;
 const priceStreams = new Map(); // symbol -> ws instance to Binance

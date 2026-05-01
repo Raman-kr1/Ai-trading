@@ -12,6 +12,7 @@ const { connectDatabase, disconnectDatabase } = require('./config/database');
 const { redisClient } = require('./config/redis');
 const { startWorker } = require('./workers/tradingWorker');
 const wsService = require('./services/websocket.service');
+const positionMonitor = require('./services/positionMonitor.service');
 const logger = require('./utils/logger');
 
 async function startServer() {
@@ -53,6 +54,14 @@ async function startServer() {
       logger.warn('Trading worker failed to start (Redis may be down):', err.message);
     }
 
+    // Bring open positions under active management. Safe to call even
+    // if Mongo is degraded — the monitor self-heals via its reconciler.
+    try {
+      await positionMonitor.start();
+    } catch (err) {
+      logger.warn('Position monitor failed to start:', { error: err.message });
+    }
+
     const shutdown = async (signal) => {
       logger.info(`${signal} received. Shutting down gracefully...`);
       httpServer.close(() => logger.info('HTTP server closed.'));
@@ -61,6 +70,8 @@ async function startServer() {
         await worker.close();
         logger.info('Trading worker closed.');
       }
+
+      positionMonitor.stop();
 
       await disconnectDatabase();
       await redisClient.quit();

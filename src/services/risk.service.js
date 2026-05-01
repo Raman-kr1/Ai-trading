@@ -62,11 +62,15 @@ async function validateTrade(decision, capital, symbol) {
   }
 
   // ── Rule 4: Position Size Limit ───────────────────────────
-  const positionValue = decision.entry_price * (decision.quantity || 1);
+  const qty = decision.quantity || 0;
+  if (qty <= 0) {
+    reasons.push('Calculated position size is zero — entry/stop-loss too close or capital too small');
+  }
+  const positionValue = decision.entry_price * qty;
   const positionPercent = capital > 0 ? roundTo((positionValue / capital) * 100, 2) : 100;
   metrics.positionPercent = positionPercent;
 
-  if (positionPercent > config.risk.maxTradeSizePercent) {
+  if (qty > 0 && positionPercent > config.risk.maxTradeSizePercent) {
     reasons.push(
       `Position size ${positionPercent}% exceeds maximum ${config.risk.maxTradeSizePercent}%`
     );
@@ -128,18 +132,24 @@ async function validateTrade(decision, capital, symbol) {
  * Uses fixed fractional position sizing.
  */
 function calculatePositionSize(capital, entryPrice, stopLoss) {
-  const maxRiskAmount = capital * (config.risk.maxTradeSizePercent / 100);
+  if (!entryPrice || entryPrice <= 0) return 0;
+
+  const maxPositionValue = capital * (config.risk.maxTradeSizePercent / 100);
   const riskPerUnit = Math.abs(entryPrice - stopLoss);
 
   if (riskPerUnit === 0) return 0;
 
-  const quantity = Math.floor(maxRiskAmount / riskPerUnit);
-  const positionValue = quantity * entryPrice;
+  // Risk-based: how many units can we buy with our risk budget?
+  let quantity = maxPositionValue / riskPerUnit;
 
-  // Ensure position doesn't exceed max allowed
-  if (positionValue > capital * (config.risk.maxTradeSizePercent / 100)) {
-    return Math.floor((capital * (config.risk.maxTradeSizePercent / 100)) / entryPrice);
+  // Cap: the full position value must not exceed the max allowed size
+  if (quantity * entryPrice > maxPositionValue) {
+    quantity = maxPositionValue / entryPrice;
   }
+
+  // Round to 5 decimal places (Binance supports 8 decimal precision,
+  // but 5 is safe for all pairs including BTC at $90k+).
+  quantity = Math.round(quantity * 1e5) / 1e5;
 
   return quantity;
 }

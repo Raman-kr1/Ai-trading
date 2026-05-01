@@ -5,6 +5,7 @@ import PriceChart from '../components/PriceChart.jsx';
 import TradePanel from '../components/TradePanel.jsx';
 import TradeHistory from '../components/TradeHistory.jsx';
 import SystemStatus from '../components/SystemStatus.jsx';
+import OpenPositions from '../components/OpenPositions.jsx';
 import LogsViewer from '../components/LogsViewer.jsx';
 import PnLChart from '../components/PnLChart.jsx';
 import ToastContainer from '../components/Toast.jsx';
@@ -28,6 +29,7 @@ export default function Dashboard() {
         <section className="col-span-12 lg:col-span-8"><PriceChart /></section>
         <section className="col-span-12 lg:col-span-4 flex flex-col gap-4">
           <SystemStatus />
+          <OpenPositions />
           <PnLChart />
         </section>
 

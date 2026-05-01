@@ -67,7 +67,7 @@ export function useWebSocket() {
           retryRef.current = 0;
           stopFallback();
           setWsState('connected');
-          ws.send(JSON.stringify({ action: 'subscribe', channels: ['price', 'candle', 'decision', 'trade', 'trade:closed', 'log', 'status'] }));
+          ws.send(JSON.stringify({ action: 'subscribe', channels: ['price', 'candle', 'decision', 'trade', 'trade:closed', 'position:exit', 'log', 'status'] }));
         };
 
         ws.onmessage = (evt) => {
@@ -110,6 +110,17 @@ export function useWebSocket() {
                 message: `PnL ${data.pnl?.toFixed?.(2) ?? data.pnl}`,
               });
               break;
+            case 'position:exit': {
+              const reasonLabel = data.reason === 'STOP_LOSS' ? '🛑 Stop-loss' : '🎯 Take-profit';
+              pushToast({
+                type: data.reason === 'TAKE_PROFIT' ? 'success' : 'error',
+                title: `${reasonLabel} hit: ${data.symbol}`,
+                message: `Exit @ ${Number(data.exitPrice).toFixed(2)} · PnL ${
+                  data.pnl != null ? Number(data.pnl).toFixed(2) : '—'
+                }`,
+              });
+              break;
+            }
             case 'log':
               prependLog({
                 level: data.level,

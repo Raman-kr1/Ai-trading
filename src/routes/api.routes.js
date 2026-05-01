@@ -9,6 +9,7 @@ const express = require('express');
 const router = express.Router();
 const ctrl = require('../controllers/api.controller');
 const { addTradingJob } = require('../workers/tradingWorker');
+const positionMonitor = require('../services/positionMonitor.service');
 
 router.get('/market-data', ctrl.getMarketData);
 router.get('/ai-decision', ctrl.getAIDecision);
@@ -17,6 +18,10 @@ router.post('/trades/:tradeId/close', ctrl.postCloseTrade);
 router.get('/status', ctrl.getStatus);
 router.get('/logs', ctrl.getLogs);
 router.get('/pnl-series', ctrl.getPnlSeries);
+
+router.get('/positions', (_req, res) => {
+  res.json(positionMonitor.snapshot());
+});
 
 // Manual "Execute Trade" action from the trade panel.
 router.post('/execute', async (req, res) => {

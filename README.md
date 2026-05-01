@@ -122,25 +122,40 @@ Production-ready AI trading automation system using Node.js, integrating **Binan
 - Redis (local or cloud)
 - API keys for Binance / Zerodha / Claude
 
-### Setup
+### One-command launch
 
 ```bash
-# 1. Install dependencies
+# Boots backend (:3000) + worker + frontend (:5173) in one terminal
+./start.sh
+
+# Variants
+./start.sh --no-worker      # skip BullMQ worker
+./start.sh --no-frontend    # backend + worker only
+./start.sh --prod           # NODE_ENV=production
+```
+
+`start.sh` is a thin wrapper around `node dev.js` which runs preflight
+checks (Node ≥ 18, `.env`, Redis, Mongo, ports 3000/5173, `node_modules`),
+auto-runs `npm install` when missing, and auto-restarts any child that
+crashes.
+
+### Manual setup (if you prefer)
+
+```bash
 npm install
-
-# 2. Configure environment
-cp .env.example .env
-# Edit .env with your API keys
-
-# 3. Validate system
-npm run test:run
-
-# 4. Start the server
-npm run dev
-
-# 5. Open dashboard
+cp .env.example .env        # then edit .env with your API keys
+npm run test:run            # validate system
+npm run dev                 # backend only
 open http://localhost:3000/dashboard
 ```
+
+### See also
+
+- **[VISUAL_ARCHITECTURE.md](./VISUAL_ARCHITECTURE.md)** — diagrams of
+  process topology, service graph, event bus, and end-to-end flow.
+- **[CHANGELOG.md](./CHANGELOG.md)** — recent changes (Position Monitor,
+  Binance OCO, single launcher) and the upcoming roadmap.
+- **[ARCHITECTURE.md](./ARCHITECTURE.md)** — architectural reasoning.
 
 ### Running the Worker (Separate Process)
 
