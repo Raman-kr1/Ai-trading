@@ -10,6 +10,7 @@ const router = express.Router();
 const ctrl = require('../controllers/api.controller');
 const { addTradingJob } = require('../workers/tradingWorker');
 const positionMonitor = require('../services/positionMonitor.service');
+const killSwitch = require('../services/killSwitch.service');
 
 router.get('/market-data', ctrl.getMarketData);
 router.get('/ai-decision', ctrl.getAIDecision);
@@ -21,6 +22,33 @@ router.get('/pnl-series', ctrl.getPnlSeries);
 
 router.get('/positions', (_req, res) => {
   res.json(positionMonitor.snapshot());
+});
+
+// ── Kill switch ──────────────────────────────────────────────
+router.get('/kill-switch', async (_req, res) => {
+  try {
+    res.json(await killSwitch.getStatus());
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/kill-switch/halt', async (req, res) => {
+  try {
+    const reason = (req.body && req.body.reason) || 'manual via dashboard';
+    res.json(await killSwitch.halt(reason));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/kill-switch/resume', async (req, res) => {
+  try {
+    const actor = (req.body && req.body.actor) || 'dashboard';
+    res.json(await killSwitch.resume(actor));
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 // Manual "Execute Trade" action from the trade panel.

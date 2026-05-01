@@ -16,6 +16,7 @@ const indicatorService = require('../services/indicator.service');
 const aiService = require('../services/ai.service');
 const riskService = require('../services/risk.service');
 const executionService = require('../services/execution.service');
+const killSwitch = require('../services/killSwitch.service');
 const Decision = require('../models/decision.model');
 const { emit: emitEvent } = require('../utils/eventBus');
 const logger = require('../utils/logger');
@@ -44,6 +45,13 @@ async function processTradingJob(job) {
   logger.info(`🔄 Trading pipeline started: ${symbol} [${exchange}]`, { jobId: job.id });
 
   try {
+    // Step 0: Kill-switch — abort before doing anything expensive.
+    if (await killSwitch.isHalted()) {
+      const reason = await killSwitch.getReason();
+      logger.warn(`⛔ Pipeline halted by kill-switch: ${symbol} (${reason})`);
+      return { status: 'halted', symbol, reason };
+    }
+
     // Step 1: Fetch market data
     job.updateProgress(10);
     let candles;

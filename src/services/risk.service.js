@@ -14,6 +14,7 @@
 
 const config = require('../config');
 const Trade = require('../models/trade.model');
+const killSwitch = require('./killSwitch.service');
 const logger = require('../utils/logger');
 const { roundTo } = require('../utils/helpers');
 
@@ -28,6 +29,13 @@ const { roundTo } = require('../utils/helpers');
 async function validateTrade(decision, capital, symbol) {
   const reasons = [];
   const metrics = {};
+
+  // ── Rule 0: Kill switch ──────────────────────────────────
+  if (await killSwitch.isHalted()) {
+    const reason = await killSwitch.getReason();
+    reasons.push(`Trading halted by kill switch: ${reason}`);
+    return { approved: false, reasons, riskMetrics: metrics };
+  }
 
   // ── Rule 1: Risk/Reward Ratio ─────────────────────────────
   const risk = Math.abs(decision.entry_price - decision.stop_loss);
@@ -59,6 +67,10 @@ async function validateTrade(decision, capital, symbol) {
     reasons.push(
       `Daily loss ${dailyLossPercent}% exceeds maximum ${config.risk.maxDailyLossPercent}%`
     );
+    // Auto-engage the kill switch so subsequent jobs short-circuit
+    // immediately instead of re-running the full pipeline only to be
+    // rejected here again.
+    await killSwitch.tripIfDailyLossExceeded(dailyLossPercent).catch(() => {});
   }
 
   // ── Rule 4: Position Size Limit ───────────────────────────

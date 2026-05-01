@@ -93,11 +93,39 @@ End-to-end smoke test on `./start.sh`:
 
 ---
 
+### Added — Global kill switch (Item D, partial)
+
+Defense-in-depth global halt with three independent enforcement points:
+
+- **`src/services/killSwitch.service.js`** (new) — env (`TRADING_HALTED`)
+  + Redis runtime flag (`system:trading:halted`). Fail-safe: if Redis is
+  unreachable, defaults to HALTED rather than blindly trading. Auto-trip
+  helpers `tripIfDailyLossExceeded()` and `tripIfConsecutiveLosses()`.
+- **`src/workers/tradingWorker.js`** — gates the pipeline at step 0;
+  halted jobs return `{status:'halted'}` without spending Claude tokens
+  or hitting Binance.
+- **`src/services/risk.service.js`** — Rule 0 rejects every trade if
+  halted; auto-engages the switch when daily-loss breach hits.
+- **`src/services/execution.service.js`** — last-line check inside
+  `executeTrade()` to catch the race between risk validation and order
+  placement.
+- **`src/routes/api.routes.js`** — `GET /api/kill-switch`,
+  `POST /api/kill-switch/halt`, `POST /api/kill-switch/resume`.
+- **`src/services/websocket.service.js`** — broadcasts `killSwitch`
+  channel events.
+- **`frontend/src/components/KillSwitch.jsx`** (new) — big-red-button
+  panel; turns green when halted, locks when env flag is set.
+- **`.env`** — `TRADING_HALTED=false` documented.
+
+End-to-end verified: HALT → worker logs `⛔ Pipeline halted` → RESUME
+unblocks the queue.
+
 ## Roadmap (next, in order)
 
-| # | Item                                            | Status      |
-|---|-------------------------------------------------|-------------|
-| A | Position monitor + auto SL/TP                   | ✅ Done      |
-| D | Kill switch + reconciler + dashboard auth       | ⏭ Next      |
-| C | Real backtest engine (Sharpe, drawdown, walk-fwd)| Pending     |
-| B | Tool-use agentic Claude loop with memory store   | Pending     |
+| # | Item                                              | Status      |
+|---|---------------------------------------------------|-------------|
+| A | Position monitor + auto SL/TP                     | ✅ Done      |
+| D | Kill switch (manual + auto-trip)                  | ✅ Done      |
+| D2| Reconciler + dashboard auth middleware            | ⏭ Next      |
+| C | Real backtest engine (Sharpe, drawdown, walk-fwd) | Pending     |
+| B | Tool-use agentic Claude loop with memory store    | Pending     |

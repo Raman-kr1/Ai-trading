@@ -11,6 +11,7 @@ const Trade = require('../models/trade.model');
 const { createHmacSignature, generateTradeId, roundTo } = require('../utils/helpers');
 const { getKeepAliveConfig } = require('../utils/performance');
 const { emit: emitEvent } = require('../utils/eventBus');
+const killSwitch = require('./killSwitch.service');
 const logger = require('../utils/logger');
 
 // Pre-configured keep-alive agents for low-latency order placement
@@ -29,6 +30,13 @@ const keepAlive = getKeepAliveConfig();
  * @returns {Object} Trade record
  */
 async function executeTrade({ symbol, exchange, decision, riskCheck, quantity, aiDecisionId }) {
+  // Last-line check: refuse to place orders if the kill switch tripped
+  // between risk validation and execution (a real race in async pipelines).
+  if (await killSwitch.isHalted()) {
+    const reason = await killSwitch.getReason();
+    throw new Error(`Execution refused — kill switch engaged (${reason})`);
+  }
+
   const tradeId = generateTradeId();
   const isPaper = config.app.tradingMode === 'paper';
 
